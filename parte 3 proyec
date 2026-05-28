@@ -1,0 +1,580 @@
+    # =========================================================================
+    # --- MÓDULO DE CUPONES PREMIUM: CONSOLA DE MONITOREO Y APERTURA V3 ---
+    # =========================================================================
+    
+    lista_cupones_tabla_contenedor = ft.ListView(expand=True, spacing=0, height=140)
+
+    # Inputs estilizados nativos con bordes violetas fijos de alto contraste
+    cp_txt_codigo = ft.TextField(
+        label="ASIGNAR NOMBRE/CÓDIGO", 
+        width=250, height=40, text_size=13, color="white",
+        cursor_color="#8B5CF6", border_width=1.5, border_color="#8B5CF6",
+        focused_border_color="#AF7AC5", border_radius=8
+    )
+    cp_txt_porcentaje = ft.TextField(
+        label="DESCUENTO (%)", 
+        height=40, text_size=13, color="white", cursor_color="#8B5CF6",
+        keyboard_type=ft.KeyboardType.NUMBER, border_width=1.5, border_color="#8B5CF6",
+        focused_border_color="#AF7AC5", border_radius=8
+    )
+    cp_txt_cupos = ft.TextField(
+        label="CANT. CUPOS", 
+        height=40, text_size=13, color="white", cursor_color="#8B5CF6",
+        keyboard_type=ft.KeyboardType.NUMBER, border_width=1.5, border_color="#8B5CF6",
+        focused_border_color="#AF7AC5", border_radius=8
+    )
+    cp_txt_tope_dinero = ft.TextField(
+        label="TOPE MÁX (USD)", 
+        hint_text="0.00 sin tope", height=40, text_size=13, color="white",
+        cursor_color="#8B5CF6", keyboard_type=ft.KeyboardType.NUMBER, border_width=1.5,
+        border_color="#8B5CF6", focused_border_color="#AF7AC5", border_radius=8
+    )
+    cp_txt_fecha_inicio = ft.TextField(
+        label="INICIO (D/M/A)", 
+        value=datetime.now().strftime("%d/%m/%y"), 
+        width=115, height=40, text_size=13, color="white", cursor_color="#FC7A00",
+        border_width=1.5, border_color="#FC7A00", focused_border_color="#B15F12", border_radius=8
+    )
+    cp_txt_fecha_fin = ft.TextField(
+        label="VENCE (D/M/A)", 
+        value=datetime.now().strftime("%d/%m/%y"), 
+        width=115, height=40, text_size=13, color="white", cursor_color="#FC7A00",
+        border_width=1.5, border_color="#FC7A00", focused_border_color="#B15F12", border_radius=8
+    )
+
+    def al_enfocar_tope(e):
+        if cp_txt_tope_dinero.value == "0.00 sin tope":
+            cp_txt_tope_dinero.value = ""
+            cp_txt_tope_dinero.color = "white"
+            page.update()
+
+    def al_desenfocar_tope(e):
+        if cp_txt_tope_dinero.value.strip() == "" or cp_txt_tope_dinero.value.strip() == "0":
+            cp_txt_tope_dinero.value = "0.00 sin tope"
+            cp_txt_tope_dinero.color = "rgba(255, 255, 255, 0.4)"
+            page.update()
+
+    cp_txt_tope_dinero.on_focus = al_enfocar_tope
+    cp_txt_tope_dinero.on_blur = al_desenfocar_tope
+
+    # 4. Motor de borrado individual de registros en caliente
+    def eliminar_cupon_individual_db(e, codigo_borrar):
+        conn = sqlite3.connect("starblim.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM cupones WHERE codigo = ?", (codigo_borrar.upper().strip(),))
+        conn.commit()
+        conn.close()
+        recargar_consola_cupones_desde_db()
+
+    # 5. Renderizador nativo en cuadrícula (DataTable con Columna de Vencimiento)
+    def recargar_consola_cupones_desde_db():
+        lista_cupones_tabla_contenedor.controls.clear()
+        
+        conn = sqlite3.connect("starblim.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM cupones ORDER BY codigo ASC")
+        registros = cursor.fetchall()
+        conn.close()
+
+        filas_datos_tabla = []
+        for reg in registros:
+            cod = reg[0]
+            pct = f"{reg[1]:.0f}%"
+            f_vence = reg[7] if reg[7] else "--/--/--"
+            
+            tope = f"USD {reg[5]:.2f}" if reg[4] == 1 else "LIBRE"
+
+            filas_datos_tabla.append(
+                ft.DataRow(
+                    cells=[
+                        ft.DataCell(ft.Text(cod, color="white", size=13, weight="bold")),
+                        ft.DataCell(ft.Text(pct, color="#5CECF6", size=13, weight="bold")),
+                        ft.DataCell(ft.Text(f_vence, color="white", size=13)),  
+                        ft.DataCell(ft.Text(tope, color="#00FFCC" if reg[4] == 1 else "rgba(255,255,255,0.4)", size=13, weight="bold")),
+                        ft.DataCell(
+                            ft.IconButton(
+                                icon=ft.Icons.DELETE_ROUNDED, icon_color="#FF5722", icon_size=15, padding=0,
+                                on_click=lambda e, c=cod: eliminar_cupon_individual_db(e, c)
+                            )
+                        ),
+                    ]
+                )
+            )
+
+        tabla_real_cupones = ft.DataTable(
+            heading_row_color="#030097",
+            heading_row_height=32,
+            data_row_min_height=28,
+            data_row_max_height=28,
+            column_spacing=24,
+            divider_thickness=0.5,
+            horizontal_lines=ft.BorderSide(0.5, "rgba(255,255,255,0.1)"),
+            columns=[
+                ft.DataColumn(ft.Text("CÓDIGO", color="white", size=13, weight="bold")),
+                ft.DataColumn(ft.Text("REBAJA", color="white", size=13, weight="bold")),
+                ft.DataColumn(ft.Text("VENCE", color="white", size=13, weight="bold")), 
+                ft.DataColumn(ft.Text("TOPE", color="white", size=13, weight="bold")),
+                ft.DataColumn(ft.Text("", width=20)),
+            ],
+            rows=filas_datos_tabla
+        )
+        
+        lista_cupones_tabla_contenedor.controls.append(tabla_real_cupones)
+        page.update()
+
+    # 6. Guardado transaccional en SQLite con soporte para el tope sutil 
+    def ejecutar_alta_cupon_db(e):
+        if not cp_txt_codigo.value or not cp_txt_porcentaje.value or not cp_txt_cupos.value:
+            return
+        
+        cod_final = cp_txt_codigo.value.upper().strip()
+        try:
+            pct_final = float(cp_txt_porcentaje.value)
+            cup_final = int(cp_txt_cupos.value)
+            
+            texto_tope = cp_txt_tope_dinero.value.strip()
+            if texto_tope == "0.00 sin tope" or texto_tope == "" or texto_tope == "0":
+                tope_final = 0.0
+                flag_tope = 0
+            else:
+                tope_final = float(texto_tope)
+                flag_tope = 1
+        except ValueError:
+            return
+
+        f_ini = cp_txt_fecha_inicio.value.strip()
+        f_fin = cp_txt_fecha_fin.value.strip()
+
+        conn = sqlite3.connect("starblim.db")
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO cupones VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (cod_final, pct_final, cup_final, cup_final, flag_tope, tope_final, f_ini, f_fin))
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.close()
+            return
+        conn.close()
+
+        cp_txt_codigo.value = ""
+        cp_txt_porcentaje.value = ""
+        cp_txt_cupos.value = ""
+        cp_txt_tope_dinero.value = "0.00 sin tope"
+        cp_txt_tope_dinero.color = "rgba(255, 255, 255, 0.4)"
+        
+        recargar_consola_cupones_desde_db()
+
+    # Cartel flotante de ayuda secundario de cupones
+    dialogo_ayuda_cupones_info = ft.AlertDialog(
+        bgcolor="#0B0E14",
+        title=ft.Row([
+            ft.Icon(ft.Icons.INFO_OUTLINE, color="#8B5CF6"),
+            ft.Text("INSTRUCCIÓN OPERATIVA DE CUPONES", color="#8B5CF6", size=14, weight="bold")
+        ], alignment=ft.MainAxisAlignment.START),
+        content=ft.Container(
+            width=400, height=210,
+            content=ft.Column([
+                ft.Row([
+                    ft.Text("•", color="white", size=13.5, weight="bold"),
+                    ft.Container(expand=True, content=ft.Text("CUPONES: Se pueden crear códigos promocionales con vencimiento y límite de stock, los cupones solo afectan al precio del alojamiento y solo se canjean a la hora de registrar al cliente.", color="white", size=14.5))
+                ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.START),
+                ft.Container(height=4),
+                ft.Row([
+                    ft.Text("•", color="white", size=13.5, weight="bold"),
+                    ft.Container(expand=True, content=ft.Text("TOPE DE DINERO (OPCIONAL): afecta a determinado monto (ejemplo: se pone un tope de $1000, entonces, si un cliente gasta $3000, solo recibira un descuento en los primeros $1000). Sino se quiere aplicar tope dejarlo en 0 (en este caso, el descuento se aplicará al total del precio del alojamiento).", color="white", size=14.5))
+                ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.START),
+            ], spacing=6, tight=True)
+        ),
+        actions=[
+            ft.TextButton("ENTENDIDO", on_click=lambda _: [setattr(dialogo_ayuda_cupones_info, "open", False), page.update()], style=ft.ButtonStyle(color="#8B5CF6"))
+        ],
+        actions_alignment=ft.MainAxisAlignment.END
+    )
+    page.overlay.append(dialogo_ayuda_cupones_info)
+
+    def abrir_ayuda_cupones_popup(e):
+        dialogo_ayuda_cupones_info.open = True
+        page.update()
+
+    # 8. Ventana flotante definitiva: Consola de cupones con ayuda integrada
+    dialogo_cupones_maestro = ft.AlertDialog(
+        bgcolor="#0B0E14",
+        modal=True,
+        title=ft.Row([
+            ft.Container(expand=1),
+            ft.Container(
+                expand=3,
+                alignment=ft.Alignment(0, 0),
+                content=ft.Text("CREAR CUPÓN DE DESCUENTO", color="#8B5CF6", size=20, weight="bold")
+            ),
+            ft.Container(
+                expand=1,
+                alignment=ft.Alignment(1, 0),
+                content=ft.IconButton(
+                    icon=ft.Icons.INFO_OUTLINE, 
+                    icon_size=20, 
+                    icon_color="#00ACF0",
+                    tooltip="Ver instrucciones operativas", 
+                    on_click=abrir_ayuda_cupones_popup,
+                    style=ft.ButtonStyle(
+                        padding=0, 
+                        visual_density=ft.VisualDensity.COMPACT,
+                        overlay_color="rgba(139, 92, 246, 0.15)"
+                    )
+                )
+            )
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+
+        content=ft.Container(
+            width=580, height=415,
+            padding=ft.Padding(12, 5, 12, 5),
+            content=ft.Column([
+                ft.Container(height=6),
+                ft.Row([cp_txt_codigo], alignment=ft.MainAxisAlignment.CENTER),
+                ft.Container(height=14),
+                ft.Row([
+                    ft.Container(content=cp_txt_porcentaje, expand=True),
+                    ft.Container(content=cp_txt_cupos, expand=True),
+                    ft.Container(content=cp_txt_tope_dinero, expand=True)
+                ], spacing=12),
+                ft.Container(height=14),
+                ft.Row([
+                    ft.Container(content=cp_txt_fecha_inicio, expand=True),
+                    ft.Container(content=cp_txt_fecha_fin, expand=True)
+                ], spacing=12),
+                ft.Container(height=16),
+                ft.Container(
+                    content=ft.TextButton(
+                        content=ft.Text("GENERAR E INYECTAR CUPÓN V3", color="white", size=12, weight="bold"),
+                        style=ft.ButtonStyle(bgcolor="#8B5CF6", shape=ft.RoundedRectangleBorder(radius=8), padding=12),
+                        on_click=ejecutar_alta_cupon_db
+                    ),
+                    alignment=ft.Alignment(0, 0)
+                ),
+                ft.Container(height=10),
+                ft.Divider(height=1, color="rgba(255,255,255,0.2)"),
+                ft.Container(height=10),
+                ft.Text("CONSOLA DE MONITOREO DE CUPONES ACTIVOS", color="white", size=11, weight="bold"),
+                ft.Container(height=6),
+                ft.Container(
+                    expand=True,
+                    bgcolor="#40000000",
+                    border=borde_de_las_tablas,
+                    border_radius=8,
+                    padding=6,
+                    content=ft.Container(content=lista_cupones_tabla_contenedor, expand=True)
+                )
+            ], spacing=0, tight=True)
+        ),
+        actions=[
+            ft.TextButton(
+                "CERRAR PANEL", 
+                on_click=lambda _: [setattr(dialogo_cupones_maestro, "open", False), page.update()],
+                style=ft.ButtonStyle(color="white", text_style=ft.TextStyle(size=12, weight="bold"))
+            )
+        ],
+        actions_alignment=ft.MainAxisAlignment.END
+    )
+
+    def abrir_modal_cupones_completo(e):
+        recargar_consola_cupones_desde_db()
+        dialogo_cupones_maestro.open = True
+        page.update()
+
+    # 9. Botón físico violeta renovado acoplado a la lista final
+    btn_cupon_descuento = ft.TextButton(
+        content=ft.Text("CREAR CUPÓN DE DESCUENTO", color="white", size=12, weight="bold"),
+        style=ft.ButtonStyle(
+            bgcolor="#8B5CF6", 
+            shape=ft.RoundedRectangleBorder(radius=15),
+            side=borde_premium, padding=11
+        ),
+        on_click=abrir_modal_cupones_completo
+    )
+
+    # =========================================================================
+    # --- MÓDULO DESCUENTO RESERVA GLOBAL: FORMULARIO Y SEGURIDAD V3 ---
+    # =========================================================================
+    
+    dr_txt_porcentaje = ft.TextField(
+        label="PORCENTAJE (%)",
+        value="0.0", width=150, height=40, text_size=13, color="white",
+        cursor_color="#2E7D32", border_width=1.5, border_color="#00FFCC",
+        focused_border_color="#2E7D32", border_radius=8,
+        keyboard_type=ft.KeyboardType.NUMBER
+    )
+
+    switch_activar_descuento_reserva = ft.Switch(
+        label="Activar o desactivar",
+        label_text_style=ft.TextStyle(color="rgba(255,255,255,0.8)", size=11, weight="bold"),
+        active_color="#00FFCC",
+        value=False
+    )
+
+    def guardar_descuento_reserva_persistente(e):
+        try:
+            pct_final = float(dr_txt_porcentaje.value)
+        except ValueError:
+            return
+
+        flag_activo = 1 if switch_activar_descuento_reserva.value else 0
+
+        conn = sqlite3.connect("starblim.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE config_reserva 
+            SET activo = ?, porcentaje = ? 
+            WHERE id = 1
+        """, (flag_activo, pct_final))
+        conn.commit()
+        conn.close()
+
+        dialogo_seguridad_reserva.open = False
+        dialogo_descuento_reserva_maestro.open = False
+        page.update()
+        aplicar_filtros_universales(None)
+
+    dialogo_seguridad_reserva = ft.AlertDialog(
+        bgcolor="#0B0E14",
+        title=ft.Row([
+            ft.Icon(ft.Icons.WARNING_ROUNDED, color="#FF3366"),
+            ft.Text("ADVERTENCIA DE TARIFAS", color="#FF3366", size=14, weight="bold")
+        ], alignment=ft.MainAxisAlignment.START),
+        content=ft.Container(
+            width=320, height=75,
+            content=ft.Text(
+                "¿Está seguro de alterar el precio base de todas las unidades? Este cambio impactará de inmediato en las tarifas visibles al cliente.",
+                color="white", size=12.5
+            )
+        ),
+        actions=[
+            ft.TextButton("CANCELAR", on_click=lambda _: [setattr(dialogo_seguridad_reserva, "open", False), page.update()], style=ft.ButtonStyle(color="white")),
+            ft.TextButton("SÍ, PROCEDER", on_click=guardar_descuento_reserva_persistente, style=ft.ButtonStyle(color="#00FFCC")),
+        ],
+        actions_alignment=ft.MainAxisAlignment.END
+    )
+    page.overlay.append(dialogo_seguridad_reserva)
+
+    def lanzar_confirmacion_seguridad_dr(e):
+        try:
+            float(dr_txt_porcentaje.value)
+            dialogo_seguridad_reserva.open = True
+            page.update()
+        except ValueError:
+            dr_txt_porcentaje.error_text = "Número inválido"
+            page.update()
+
+    # 5. Ventana flotante principal de Descuento de Reserva Global
+    dialogo_descuento_reserva_maestro = ft.AlertDialog(
+        bgcolor="#0B0E14",
+        modal=True,
+        title=ft.Row([
+            ft.Container(expand=1),
+            ft.Container(
+                expand=3,
+                alignment=ft.Alignment(0, 0),
+                content=ft.Text("APLICAR DESCUENTO RESERVA", color="#00FFCC", size=15, weight="bold")
+            ),
+            ft.Container(expand=1)
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        content=ft.Container(
+            width=400, 
+            height=190,  
+            padding=ft.Padding(12, 5, 12, 5),
+            content=ft.Column([
+                ft.Row([
+                    ft.Text("•", color="white", size=15, weight="bold"),
+                    ft.Container(expand=True, content=ft.Text("Aplica un descuento sobre el precio base de todos los alojamientos del hotel, solo afecta a los clientes que hicieron una reserva.", color="white", size=14))
+                ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.START),
+                
+                ft.Container(height=16),  
+                
+                ft.Row([
+                    ft.Container(content=dr_txt_porcentaje),
+                    ft.Container(content=switch_activar_descuento_reserva, padding=ft.Padding(10, 0, 0, 0))
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                
+                ft.Container(height=16),
+                
+                ft.Container(
+                    content=ft.TextButton(
+                        content=ft.Text("APLICAR Y ACTUALIZAR TARIFAS", color="white", size=12, weight="bold"),
+                        style=ft.ButtonStyle(bgcolor="#2E7D32", shape=ft.RoundedRectangleBorder(radius=8), padding=12),
+                        on_click=lanzar_confirmacion_seguridad_dr
+                    ),
+                    alignment=ft.Alignment(0, 0)
+                )
+            ], spacing=0, tight=True)
+        ),
+        actions=[
+            ft.TextButton(
+                "CERRAR PANEL", 
+                on_click=lambda _: [setattr(dialogo_descuento_reserva_maestro, "open", False), page.update()],
+                style=ft.ButtonStyle(color="white", text_style=ft.TextStyle(size=12, weight="bold"))
+            )
+        ],
+        actions_alignment=ft.MainAxisAlignment.END
+    )
+    page.overlay.append(dialogo_descuento_reserva_maestro)
+
+    def abrir_modal_descuento_reserva_completo(e):
+        conn = sqlite3.connect("starblim.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT activo, porcentaje FROM config_reserva WHERE id = 1")
+        reg = cursor.fetchone()
+        conn.close()
+
+        if reg:
+            switch_activar_descuento_reserva.value = True if reg[0] == 1 else False
+            dr_txt_porcentaje.value = str(reg[1])
+            dr_txt_porcentaje.error_text = None
+
+        dialogo_descuento_reserva_maestro.open = True
+        page.update()
+
+    # Nuevo Botón físico verde acoplado perfectamente al panel inferior
+    btn_descuento_reserva = ft.TextButton(
+        content=ft.Text("APLICAR DESCUENTO RESERVA", color="white", size=12, weight="bold"),
+        style=ft.ButtonStyle(
+            bgcolor="#2E7D32",
+            shape=ft.RoundedRectangleBorder(radius=15),
+            side=borde_premium,
+            padding=11,
+            overlay_color="rgba(255, 255, 255, 0.15)"
+        ),
+        on_click=abrir_modal_descuento_reserva_completo
+    )
+
+    fila_acciones_baja = ft.Row(
+        controls=[btn_descuento_temporada, btn_cupon_descuento, btn_descuento_reserva],
+        alignment=ft.MainAxisAlignment.CENTER, spacing=20
+    )
+
+    contenido_inventario = ft.Container(
+        padding=Padding(15, 15, 15, 15), expand=True,
+        content=ft.Column([
+            fila_herramientas_alta, 
+            ft.Container(height=10),
+            cuadro_inventario_filas, 
+            ft.Container(height=10),
+            fila_acciones_baja 
+        ], spacing=0, margin=0)
+    )
+
+    # =========================================================================
+    # --- MOTOR DE RENDERIZADO GENERAL DESDE BASE DE DATOS REAL (SQLITE) ---
+    # =========================================================================
+    def actualizar_grillas_desde_db():
+        conn = sqlite3.connect("starblim.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM habitaciones ORDER BY habitacion ASC")
+        registros = cursor.fetchall()
+        conn.close()
+
+        lista_habitaciones.controls.clear()
+        lista_inventario_filas.controls.clear()
+
+        for idx, reg in enumerate(registros):
+            hab_num     = reg[0]
+            hab_ubic    = reg[1]
+            hab_tipo    = reg[2]
+            hab_estado  = reg[3]
+            hab_cap     = reg[4]
+            
+            texto_adulto_db = reg[5]
+            texto_nino_db   = reg[6]
+
+            # MOTOR REACTIVO EN CALIENTE DE IVA (FACTOR 21%)
+            if switch_activar_iva.value == True:
+                try:
+                    val_a = float(texto_adulto_db.replace("USD", "").strip())
+                    hab_adulto = f"USD {val_a * 1.21:.2f}"
+                except: hab_adulto = texto_adulto_db
+                
+                try:
+                    val_n = float(texto_nino_db.replace("USD", "").strip())
+                    hab_nino = f"USD {val_n * 1.21:.2f}"
+                except: hab_nino = texto_nino_db
+            else:
+                hab_adulto = texto_adulto_db
+                hab_nino   = texto_nino_db
+
+            detalles_dict = {
+                "vista": reg[7],
+                "sub_vista": reg[8],
+                "incluye": reg[9],
+                "cama": reg[10],
+                "reserva": reg[11],
+                "desc_tit": reg[12],
+                "desc_val": reg[13],
+                "prom_tit": reg[14],
+                "prom_val": reg[15],
+                "servicios": reg[16].split(",") if reg[16] else [],
+                "fotos": reg[17].split(",") if (reg[17] and "," in reg[17]) else ["fondo.png", "fondo.png", "fondo.png", "fondo.png"]
+            }
+
+            datos_principal = {
+                "habitacion": hab_num,
+                "tipo": hab_tipo,
+                "sub": hab_ubic,
+                "capacidad": hab_cap,
+                "estado": hab_estado,
+                "adulto": hab_adulto,
+                "nino": hab_nino,
+                "detalles": detalles_dict
+            }
+            
+            color_cebra_p = color_fila_par if idx % 2 != 0 else color_fila_impar
+            lista_habitaciones.controls.append(
+                crear_fila_habitacion_dinamica(datos_principal, color_base=color_cebra_p)
+            )
+
+            datos_inventario = {
+                "habitacion": hab_num,
+                "tipo": hab_tipo,
+                "capacidad": hab_cap,
+                "estado": hab_estado,
+                "adulto": hab_adulto,
+                "nino": hab_nino
+            }
+            lista_inventario_filas.controls.append(
+                crear_fila_inventario_dinamica(datos_inventario)
+            )
+
+        page.update()
+
+    # --- SISTEMA DE FILTRADO COMBINADO CON SCROLL ---
+    cb_tipo_panel = ft.Dropdown(
+        label="Tipo de Habitación",
+        label_style=ft.TextStyle(color="rgba(255,255,255,0.6)", size=10), 
+        height=40,                         
+        text_size=12,
+        color="white",                     
+        filled=True,                       
+        fill_color="#902563EB",              
+        border_color="black", 
+        border_radius=10,
+        text_align=ft.TextAlign.CENTER,    
+        options=[
+            ft.dropdown.Option("TODAS"),
+            ft.dropdown.Option("2 ADULTOS"),
+            ft.dropdown.Option("FAMILIAR"),
+            ft.dropdown.Option("SUITE"),
+        ],
+        value="TODAS"
+    )
+
+    switch_precio = ft.Switch(
+        label="Filtrar por Precio (Menor a Mayor)",
+        label_text_style=ft.TextStyle(color="rgba(255,255,255,0.8)", size=11, weight="bold"),
+        active_color="#FFB300", 
+        value=False,
+    )
+
+    switch_disponibles = ft.Switch(
+        label="Mostrar solo Disponibles",
+        label_text_style=ft.TextStyle(color="rgba(255,255,255,0.8)", size=11, weight="bold"),
+        active_color="#00FFCC", 
+        value=False,
+    )
