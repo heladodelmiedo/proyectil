@@ -1,0 +1,817 @@
+    # --- VENTANA FLOTANTE: VISOR DE GALERÍA INDEPENDIENTE POR FILA ---
+    imagen_visor = ft.Image(src="fondo.png", fit="contain", height=420)
+    texto_contador = ft.Text("", color="rgba(255,255,255,0.8)", size=14, weight="bold")
+
+    def actualizar_estado_visor():
+        nonlocal indice_actual
+        imagen_visor.src = lista_fotos_actual[indice_actual]
+        texto_contador.value = f"IMAGEN {indice_actual + 1} / {len(lista_fotos_actual)}"
+        btn_retroceder.disabled = (indice_actual == 0)
+        btn_avanzar.disabled = (indice_actual == len(lista_fotos_actual) - 1)
+        page.update()
+
+    def avanzar_foto(e):
+        nonlocal indice_actual
+        if indice_actual < len(lista_fotos_actual) - 1:
+            indice_actual += 1
+            actualizar_estado_visor()
+
+    def retroceder_foto(e):
+        nonlocal indice_actual
+        if indice_actual > 0:
+            indice_actual -= 1
+            actualizar_estado_visor()
+
+    btn_retroceder = ft.IconButton(
+        icon=ft.Icons.ARROW_BACK_IOS_NEW, icon_color="white", icon_size=24,
+        on_click=retroceder_foto, style=ft.ButtonStyle(bgcolor={ft.ControlState.HOVERED: "rgba(255,255,255,0.1)"})
+    )
+    btn_avanzar = ft.IconButton(
+        icon=ft.Icons.ARROW_FORWARD_IOS, icon_color="white", icon_size=24,
+        on_click=avanzar_foto, style=ft.ButtonStyle(bgcolor={ft.ControlState.HOVERED: "rgba(255,255,255,0.1)"})
+    )
+
+    dialogo_visor_galeria = ft.AlertDialog(
+        bgcolor="blueaccent,0.46", 
+        content=ft.Container(
+            width=850,
+            padding=Padding(4, 5, 4, 5),
+            border_radius=12,
+            content=ft.Column([
+                ft.Row([
+                    btn_retroceder,
+                    ft.Container(content=imagen_visor, expand=True, alignment=ft.Alignment(0, 0)),
+                    btn_avanzar
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                
+                ft.Container(height=6), 
+                
+                ft.Row([
+                    ft.Container(width=40), 
+                    ft.Container(content=texto_contador, expand=True, alignment=ft.Alignment(0, 0)),
+                    ft.TextButton(
+                        "CERRAR", 
+                        on_click=lambda _: setattr(dialogo_visor_galeria, "open", False) or page.update(), 
+                        style=ft.ButtonStyle(color="white")
+                    )
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+            ], tight=True, spacing=0)
+        )
+    )
+    page.overlay.append(dialogo_visor_galeria)
+
+    # =========================================================================
+    # --- MÓDULO AUTÓNOMO: PANEL DE ADMINISTRACIÓN PREMIUM (PARTE 1) ---
+    # =========================================================================
+    dialogo_escala_info = ft.AlertDialog(
+        bgcolor="#141923",  
+        title=ft.Text("ESCALA DE ACTIVIDAD", color="#A855F7", size=14, weight="bold"),
+        content=ft.Column([
+            ft.Row([ft.Container(width=16, height=16, bgcolor="#00F7FF", border_radius=4), ft.Text("NIVEL 4  ·  ACTIVIDAD PICO", size=11, color="white", weight="bold")]),
+            ft.Row([ft.Container(width=16, height=16, bgcolor="#8C3AFF", border_radius=4), ft.Text("NIVEL 3  ·  ACTIVIDAD ALTA", size=11, color="white")]),
+            ft.Row([ft.Container(width=16, height=16, bgcolor="#4C2277", border_radius=4), ft.Text("NIVEL 2  ·  ACTIVIDAD MEDIA", size=11, color="white")]),
+            ft.Row([ft.Container(width=16, height=16, bgcolor="#2A1B40", border_radius=4), ft.Text("NIVEL 1  ·  ACTIVIDAD BAJA", size=11, color="white")]),
+            ft.Row([ft.Container(width=16, height=16, bgcolor="#161920", border_radius=4), ft.Text("NIVEL 0  ·  SIN ACTIVIDAD / CERRADO", size=11, color="white")]),
+        ], spacing=12, height=140, width=260),
+        actions=[
+            ft.TextButton("ENTENDIDO", on_click=lambda _: setattr(dialogo_escala_info, "open", False) or page.update(), style=ft.ButtonStyle(color="#00F7FF"))
+        ],
+        actions_alignment=ft.MainAxisAlignment.END
+    )
+    page.overlay.append(dialogo_escala_info)
+
+    def abrir_escala_info(e):
+        dialogo_escala_info.open = True
+        page.update()
+
+    datos_tarjetas = [
+        {"titulo": "INGRESO DEL DÍA", "valor": "$16,957.00", "sub": "+0.67% vs ayer", "color_sub": "#00F7FF", "tooltip": None},
+        {"titulo": "INGRESO MENSUAL", "valor": "$12,050.00", "sub": "Acumulado período actual", "color_sub": "white", "tooltip": None},
+        {"titulo": "OCUPACIÓN DEL DÍA", "valor": "78.4%", "sub": "", "color_sub": "transparent", "tooltip": "15 HABITACIONES OCUPADAS  ·  5 DISPONIBLES"}
+    ]
+
+    matriz_actividad = [
+        [2, 3, 1, 2, 2, 4, 3],  # 08 AM
+        [4, 4, 3, 4, 4, 2, 2],  # 10 AM
+        [2, 2, 2, 3, 3, 4, 4],  # 12 PM
+        [4, 4, 4, 4, 4, 3, 3],  # 02 PM
+        [3, 4, 3, 2, 4, 3, 3],  # 04 PM
+        [2, 2, 1, 2, 3, 2, 2],  # 06 PM
+        [1, 1, 2, 1, 2, 3, 3],  # 08 PM
+        [0, 1, 0, 0, 1, 2, 2]   # 10 PM
+    ]
+    
+    colores_calor = {
+        0: "#161920", 1: "#2A1B40", 2: "#4C2277", 3: "#8C3AFF", 4: "#00F7FF"
+    }
+
+    valores_montaña = [
+        {"mes": "ENE", "h": 60, "pico": False}, 
+        {"mes": "FEB", "h": 80, "pico": False}, 
+        {"mes": "MAR", "h": 100, "pico": False}, 
+        {"mes": "ABR", "h": 85, "pico": False}, 
+        {"mes": "MAY", "h": 75, "pico": False}, 
+        {"mes": "JUN", "h": 110, "pico": False}, 
+        {"mes": "JUL", "h": 145, "pico": False}, 
+        {"mes": "AGO", "h": 175, "pico": True},  
+        {"mes": "SEP", "h": 155, "pico": False}, 
+        {"mes": "OCT", "h": 135, "pico": False}, 
+        {"mes": "NOV", "h": 160, "pico": False}, 
+        {"mes": "DIC", "h": 195, "pico": False}
+    ]
+
+    categorias_hotel = [
+        {"nom": "Suite Presidencial", "porc": 85},
+        {"nom": "Junior Suite", "porc": 70},
+        {"nom": "Familiar Premium", "porc": 60},
+        {"nom": "Doble Estándar", "porc": 92},
+        {"nom": "Single Ejecutiva", "porc": 45}
+    ]
+
+    # =========================================================================
+    # --- MÓDULO AUTÓNOMO: PANEL DE ADMINISTRACIÓN PREMIUM (PARTE 2) ---
+    # =========================================================================
+    panel_auditoria = ft.Container(
+        visible=False, bgcolor="#1E1233", padding=15, border_radius=10,
+        content=ft.Column([
+            ft.Text("Métricas de Rendimiento Histórico de Empleados", size=13, color="#00F7FF", weight=ft.FontWeight.BOLD),
+            ft.Row([
+                ft.Text("Carlos (Turno Tarde): Caja: +12% | Ocupación: 88% | Eficiencia HP: Óptima", size=11, color="white"),
+                ft.Text("Juan (Turno Mañana): Caja: -2% | Ocupación: 71% | Eficiencia HP: Media", size=11, color="white")
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+        ])
+    )
+
+    def toggle_auditoria(e):
+        panel_auditoria.visible = not panel_auditoria.visible
+        btn_auditar.icon_color = "#00F7FF" if panel_auditoria.visible else "white"
+        page.update()
+
+    btn_auditar = ft.IconButton(icon=ft.Icons.SETTINGS, icon_size=18, icon_color="white", tooltip="Modo Auditoría", on_click=toggle_auditoria)
+
+    cabecera_admin = ft.Row(
+        controls=[
+            ft.Row([
+                ft.Container(width=36, height=36, bgcolor="#621CA8", border_radius=18, alignment=ft.Alignment(0, 0), content=ft.Icon(ft.Icons.PERSON, color="white", size=20)),
+                ft.Column([
+                    ft.Text("Buenas tardes, Carlos", size=16, color="white", weight=ft.FontWeight.BOLD),
+                    ft.Text("Administrador de Turno • Sesión Activa", size=11, color="white")
+                ], spacing=1)
+            ]),
+            btn_auditar
+        ],
+        alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+    )
+
+    tarjetas_row = ft.Row(
+        controls=[
+            ft.Container(
+                content=ft.Column([
+                    ft.Text(t["titulo"], size=11, color="white", weight=ft.FontWeight.W_300),
+                    ft.Text(t["valor"], size=20, color="white", weight=ft.FontWeight.BOLD),
+                    ft.Text(t["sub"], size=10, color=t["color_sub"])
+                ], spacing=2),
+                bgcolor="#141923", padding=12, border_radius=8, expand=True,
+                tooltip=t.get("tooltip") 
+            ) for t in datos_tarjetas
+        ], spacing=8
+    )
+
+    # --- MAPA DE CALOR ---
+    filas_mapa = []
+    horas_labels = ["08 AM", "10 AM", "12 PM", "02 PM", "04 PM", "06 PM", "08 PM", "10 PM"]
+    dias_labels = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"]
+
+    filas_mapa.append(ft.Row([ft.Container(width=55)] + [ft.Container(width=30, content=ft.Text(d, size=11, color="white", weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)) for d in dias_labels], spacing=6))
+    for i, hora in enumerate(horas_labels):
+        bloques_fila = [ft.Container(width=55, content=ft.Text(hora, size=11, color="white", weight=ft.FontWeight.W_300))]
+        for j in range(7):
+            nivel = matriz_actividad[i][j]
+            bloques_fila.append(ft.Container(width=30, height=30, bgcolor=colores_calor[nivel], border_radius=5))
+        filas_mapa.append(ft.Row(controls=bloques_fila, spacing=6))
+
+    btn_info_mapa = ft.Container(
+        content=ft.IconButton(
+            icon=ft.Icons.INFO_OUTLINE, 
+            icon_size=16, 
+            icon_color="rgba(255,255,255,0.4)", 
+            tooltip="Ver escala de actividad", 
+            mouse_cursor=ft.MouseCursor.CLICK,
+            on_click=abrir_escala_info,
+            style=ft.ButtonStyle(padding=0, visual_density=ft.VisualDensity.COMPACT)
+        ),
+        padding=Padding(0, -8, 0, 2) 
+    )
+
+    bloque_heatmap = ft.Container(
+        bgcolor="#141923", padding=15, border_radius=10, 
+        width=345, height=365, 
+        content=ft.Column([
+            ft.Row([
+                ft.Container(
+                    content=ft.Text("ACTIVIDAD POR HORARIO", size=13, color="#A855F7", weight=ft.FontWeight.BOLD),
+                    padding=Padding(top=-2, left=0, right=0, bottom=0)
+                ),
+                btn_info_mapa
+            ], spacing=6, alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START),
+            ft.Container(height=10), 
+            ft.Container(
+                content=ft.Column(filas_mapa, spacing=6),
+                margin=Padding(left=0, top=-12, right=0, bottom=0)
+            )
+        ], spacing=2) 
+    )
+
+    # --- LA MONTAÑA ANUAL ---
+    bloques_montaña = []
+    for item in valores_montaña:
+        contenido_bloque = ft.Column(
+            [
+                ft.Text("PICO" if item["pico"] else "", size=8, color="#39FF14", weight=ft.FontWeight.BOLD) if item["pico"] else ft.Container(height=10),
+                ft.Container(
+                    width=24,
+                    height=item["h"],
+                    gradient=ft.LinearGradient(
+                        colors=["#39FF14", "#0D3A16"],
+                        begin=ft.Alignment(0, -1),
+                        end=ft.Alignment(0, 1)
+                    ),
+                    border_radius=3
+                ),
+                ft.Container(height=4),
+                ft.Text(item["mes"], size=9, color="white", weight=ft.FontWeight.W_500)
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.END
+        )
+        bloques_montaña.append(contenido_bloque)
+
+    grafico_montaña_real = ft.Row(
+        controls=bloques_montaña,
+        alignment=ft.MainAxisAlignment.SPACE_EVENLY,
+        vertical_alignment=ft.CrossAxisAlignment.END,
+        spacing=2,  
+        expand=True
+    )
+
+    bloque_montaña_izq = ft.Container(
+        bgcolor="#141923", padding=15, border_radius=10, 
+        expand=True, height=365, 
+        content=ft.Column([
+            ft.Text("CONTROL DE PRECIOS (LA MONTAÑA ANUAL)", size=13, color="#39FF14", weight=ft.FontWeight.BOLD),
+            ft.Text("Tendencias para tarifas dinámicas.", size=11, color="white"),
+            ft.Container(height=10),
+            ft.Container(content=grafico_montaña_real, expand=True) 
+        ], spacing=2)
+    )
+
+    fila_graficos_centrales = ft.Row([bloque_heatmap, bloque_montaña_izq], spacing=10, vertical_alignment=ft.CrossAxisAlignment.START)
+
+    # --- RENDIMIENTO POR CATEGORÍA ---
+    lista_barras_categorias_cian = ft.Column(
+        controls=[
+            ft.Column([
+                ft.Row([
+                    ft.Text(c["nom"].upper(), size=12, color="white", weight=ft.FontWeight.W_500), 
+                    ft.Text(f"{c['porc']}%", size=12, color="#00F7FF", weight=ft.FontWeight.BOLD) 
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Container(
+                    height=14, width=760, bgcolor="#161920", border_radius=7,
+                    alignment=ft.Alignment(-1, 0), 
+                    content=ft.Container(
+                        height=14, 
+                        width=(c["porc"] / 100) * 760, 
+                        border_radius=7,
+                        gradient=ft.LinearGradient(colors=["#621CA8", "#00F7FF"]) 
+                    )
+                )
+            ], spacing=4) for c in categorias_hotel
+        ],
+        spacing=12
+    )
+
+    bloque_categorias_abajo = ft.Container(
+        bgcolor="#141923", padding=15, border_radius=10,
+        content=ft.Column([
+            ft.Text("RENDIMIENTO DE CATEGORÍAS", size=13, color="white", weight=ft.FontWeight.BOLD),
+            ft.Container(height=5),
+            lista_barras_categorias_cian
+        ])
+    )
+
+    # CONTENEDOR PRINCIPAL DEL DASHBOARD CON SCROLL
+    contenido_dash = ft.Column(
+        [cabecera_admin, panel_auditoria, tarjetas_row, fila_graficos_centrales, bloque_categorias_abajo], 
+        spacing=12, 
+        scroll=ft.ScrollMode.AUTO
+    )
+
+    # --- LÓGICA DE NAVEGACIÓN Y APERTURA DE PESTAÑAS ---
+    vista_activa = ft.Container(content=contenido_dash, expand=True)
+
+    def ir_a_tab1(e):
+        vista_activa.content = contenido_dash
+        t1.color, t3.color = "#00F7FF", "white"
+        page.update()
+
+    def ir_a_tab3(e):
+        vista_activa.content = contenido_inventario
+        t1.color, t3.color = "white", "#00F7FF"
+        page.update()
+
+    t1 = ft.Text("DASHBOARD CENTRALIZADO", size=14, color="#00F7FF", weight=ft.FontWeight.BOLD)
+    t3 = ft.Text("INVENTARIO DE HAB.", size=14, color="white", weight=ft.FontWeight.BOLD)
+
+    fila_pestañas = ft.Row(
+        controls=[
+            ft.GestureDetector(on_tap=ir_a_tab1, mouse_cursor=ft.MouseCursor.CLICK, content=t1),
+            ft.Container(width=20),
+            ft.GestureDetector(on_tap=ir_a_tab3, mouse_cursor=ft.MouseCursor.CLICK, content=t3)
+        ],
+        alignment=ft.MainAxisAlignment.START
+    )
+
+    # --- CONTENEDOR MAESTRO ADAPTATIVO MODAL ---
+    dialogo_admin_secreto = ft.AlertDialog(
+        bgcolor="#0B0E14",
+        content=ft.Container(
+            width=850 if page.width < 1200 else (page.width * 0.75), 
+            height=540 if page.height < 800 else (page.height * 0.70),
+            content=ft.Column([
+                fila_pestañas,
+                ft.Container(height=1, bgcolor="#141923"),
+                vista_activa
+            ], expand=True)
+        )
+    )
+    page.overlay.append(dialogo_admin_secreto)
+
+    def abrir_panel_secreto_optimo(e):
+        dialogo_admin_secreto.open = True
+        page.update()
+
+    # =========================================================================
+    # --- PESTAÑA INVENTARIO DE HABITACIONES PREMIUM (FORMULARIO ADAPTADO V3) ---
+    # =========================================================================
+    input_style_inventario = {
+        "border_color": "rgba(255, 255, 255, 0.4)",
+        "focused_border_color": "#00F7FF", 
+        "color": "white",
+        "cursor_color": "#00F7FF",
+        "height": 40,
+        "text_size": 13,
+        "border_radius": 8,
+    }
+
+    # Definición de los 7 campos en el orden lógico solicitado
+    inv_txt_num = ft.TextField(label="N° CABAÑA / HAB.", **input_style_inventario)
+    inv_txt_ubicacion = ft.TextField(label="UBICACIÓN (Ej: EDIFICIO 3 · PISO 2)", **input_style_inventario)
+    inv_txt_tipo = ft.TextField(label="TIPO DE UNIDAD (Ej: SUITE)", **input_style_inventario)
+    
+    inv_cb_estado = ft.Dropdown(
+        label="ESTADO INICIAL",
+        label_style=ft.TextStyle(color="rgba(255,255,255,0.6)", size=10), # <--- CORREGIDO: label_style
+        height=40,
+        text_size=12,
+        color="white",
+        filled=True,
+        fill_color="#141923",
+        border_color="rgba(255, 255, 255, 0.4)",
+        border_radius=8,
+        options=[
+            ft.dropdown.Option("DISPONIBLE"),
+            ft.dropdown.Option("OCUPADA"),
+            ft.dropdown.Option("MANTENIMIENTO"),
+        ],
+        value="DISPONIBLE"
+    )
+
+    inv_txt_cap = ft.TextField(label="CAPACIDAD TOTAL", **input_style_inventario)
+    inv_txt_pre_a = ft.TextField(label="PRECIO ADULTOS (USD)", **input_style_inventario)
+    inv_txt_pre_n = ft.TextField(label="PRECIO NIÑOS (USD)", **input_style_inventario)
+
+    lista_inventario_filas = ft.ListView(expand=True, spacing=8)
+
+    # Motor transaccional para inyectar nuevas unidades físicas
+    def ejecutar_alta_inventario(e):
+        if not inv_txt_num.value or not inv_txt_pre_a.value:
+            return
+
+        num_hab = inv_txt_num.value.upper().strip()
+        ubicacion_hab = inv_txt_ubicacion.value.upper().strip() if inv_txt_ubicacion.value else "EDIFICIO EXTRA · PISO 1"
+        tipo_hab = inv_txt_tipo.value.upper().strip() if inv_txt_tipo.value else "ESTÁNDAR"
+        estado_hab = inv_cb_estado.value.upper()
+        cap_hab = f"{inv_txt_cap.value.strip()} PERSONAS" if inv_txt_cap.value else "2 PERSONAS"
+        
+        try:
+            precio_a = f"USD {float(inv_txt_pre_a.value.replace('USD', '').strip()):.2f}"
+            precio_n = f"USD {float(inv_txt_pre_n.value.replace('USD', '').strip()):.2f}" if inv_txt_pre_n.value else "USD 0.00"
+        except ValueError:
+            return
+
+        conn = sqlite3.connect("starblim.db")
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO habitaciones VALUES (?, ?, ?, ?, ?, ?, ?, 
+                    'Vista general', ?, 'No especificado', 'Ninguna', 
+                    'Reserva inmediata', 'DESCUENTO', 'USD 0.00', 'PROMOCIÓN', 'USD 0.00', 
+                    'WIFI,AIRE ACONDICIONADO', 'fondo.png,fondo.png,fondo.png,fondo.png')
+            """, (num_hab, ubicacion_hab, tipo_hab, estado_hab, cap_hab, precio_a, precio_n, ubicacion_hab))
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.close()
+            return
+        conn.close()
+
+        # Limpieza higiénica de casillas
+        inv_txt_num.value = ""
+        inv_txt_ubicacion.value = ""
+        inv_txt_tipo.value = ""
+        inv_cb_estado.value = "DISPONIBLE"
+        inv_txt_cap.value = ""
+        inv_txt_pre_a.value = ""
+        inv_txt_pre_n.value = ""
+        
+        dialogo_alta_inventario.open = False
+        page.update()
+        
+        try: aplicar_filtros_universales(None)
+        except: pass
+
+    # Ventana modal acoplada al motor de guardado superior
+    dialogo_alta_inventario = ft.AlertDialog(
+        bgcolor="#0B0E14", 
+        title=ft.Text("REGISTRAR UNIDAD AL INVENTARIO", color="#00F7FF", size=14, weight="bold"),
+        content=ft.Container(
+            width=340,
+            height=350,  
+            content=ft.Column(
+                [
+                    inv_txt_num, 
+                    inv_txt_ubicacion, 
+                    inv_txt_tipo, 
+                    inv_cb_estado, 
+                    inv_txt_cap, 
+                    inv_txt_pre_a, 
+                    inv_txt_pre_n
+                ], 
+                spacing=10, 
+                scroll=ft.ScrollMode.AUTO,
+                tight=True
+            )
+        ),
+        actions=[
+            ft.TextButton("CANCELAR", on_click=lambda _: setattr(dialogo_alta_inventario, "open", False) or page.update(), style=ft.ButtonStyle(color="white")),
+            ft.TextButton("AGREGAR", on_click=ejecutar_alta_inventario, style=ft.ButtonStyle(color="#00F7FF")), 
+        ],
+        actions_alignment=ft.MainAxisAlignment.END,
+    )
+    page.overlay.append(dialogo_alta_inventario)
+
+    def abrir_alta_inventario(e):
+        dialogo_alta_inventario.open = True
+        page.update()
+
+    # =========================================================================
+    # --- PESTAÑA INVENTARIO: CONTROLES Y MOTOR DE FILAS (REPARADO) ---
+    # =========================================================================
+    style_btn_mockup = ft.ButtonStyle(
+        color="white",
+        bgcolor="transparent",
+        shape=ft.RoundedRectangleBorder(radius=15),
+        side=borde_premium, 
+        padding=11,
+        text_style=ft.TextStyle(size=12, weight="bold")
+    )
+    def crear_fila_inventario_dinamica(d_inv):
+        # 🧠 CAPTURA EN RAM DE LOS DATOS SEGUROS QUE YA TRAE TU FILA NATIVA
+        num_cabaña = d_inv["habitacion"].upper().strip()
+        tipo_unidad = d_inv["tipo"].upper().strip()
+        capacidad_u = d_inv["capacidad"].upper().strip()
+        estado_u = d_inv["estado"].upper().strip()
+        adulto_raw = d_inv["adulto"]
+        nino_raw = d_inv["nino"]
+
+        # --- MOTOR INTERNO DEL MODAL DE AUDITORÍA INTELIGENTE ---
+        def abrir_desglose_modal(e):
+            import re
+            import sqlite3
+            
+            def evaluar_estado_iva(texto_raw):
+                if not texto_raw: return 0.0
+                numerico = "".join(re.findall(r'[0-9.]+', str(texto_raw)))
+                try: return float(numerico)
+                except: return 0.0
+
+            monto_base_a = evaluar_estado_iva(adulto_raw)
+            monto_base_n = evaluar_estado_iva(nino_raw)
+
+            # CONEXIÓN COMERCIAL: Validación blindada multi-formato
+            iva_global_activo = False
+            try:
+                conn = sqlite3.connect("starblim.db")
+                cursor = conn.cursor()
+                cursor.execute("SELECT activo FROM config_reserva WHERE id = 1") 
+                reg_iva = cursor.fetchone()
+                conn.close()
+                
+                if reg_iva:
+                    valor_real = reg_iva[0]
+                    # Evaluamos de forma elástica si es entero, string o booleano
+                    if valor_real == 1 or str(valor_real).strip() == "1" or valor_real is True:
+                        iva_global_activo = True
+            except Exception as ex:
+                print(f"⚠️ ARQUITECTO - ERROR CRÍTICO DE BD: {ex}")
+
+            if iva_global_activo:
+                estado_tag = "21% • ON"
+                val_iva_a = monto_base_a * 0.21
+                val_iva_n = monto_base_n * 0.21
+                base_display_a = f"USD {monto_base_a:.2f}"
+                iva_a = f"USD {val_iva_a:.2f}"
+                cliente_a = f"USD {monto_base_a + val_iva_a:.2f}"
+                base_display_n = f"USD {monto_base_n:.2f}"
+                iva_n = f"USD {val_iva_n:.2f}"
+                cliente_n = f"USD {monto_base_n + val_iva_n:.2f}"
+            else:
+                estado_tag = "21% • OFF"
+                base_display_a = f"USD {monto_base_a:.2f}"
+                cliente_a = f"USD {monto_base_a:.2f}"
+                iva_a = "USD 0.00"
+                base_display_n = f"USD {monto_base_n:.2f}"
+                cliente_n = f"USD {monto_base_n:.2f}"
+                iva_n = "USD 0.00"
+
+            tabla_auditoria_real = ft.DataTable(
+                heading_row_color="#0D43AF", 
+                heading_row_height=40,
+                data_row_min_height=45,
+                data_row_max_height=45,
+                column_spacing=28,
+                divider_thickness=0.5,
+                horizontal_lines=ft.BorderSide(0.5, "rgba(255,255,255,0.1)"),
+                columns=[
+                    ft.DataColumn(ft.Text("MÓDULO DE CONTROL", style=ft.TextStyle(color="white", size=12, weight="bold", letter_spacing=0.5))),
+                    ft.DataColumn(ft.Text("• precio base", style=ft.TextStyle(color="white", size=12, weight="bold", letter_spacing=0.5))),
+                    ft.DataColumn(ft.Text("• precio cliente", style=ft.TextStyle(color="#FFB300", size=12, weight="bold", letter_spacing=0.5))),
+                    ft.DataColumn(ft.Text(f"↳ detalle del iva ({estado_tag})", style=ft.TextStyle(color="#00FFFF", size=12, weight="bold", letter_spacing=0.5))),
+                ],
+                rows=[
+                    # ⚪ GRUPO 1: PRECIO BASE (Sincronizado en Blanco)
+                    ft.DataRow(cells=[
+                        ft.DataCell(ft.Text("ADULTO (BASE)", color="white", size=12, weight="bold")),
+                        ft.DataCell(ft.Text(base_display_a, color="rgba(255,255,255,0.8)", size=12)),
+                        ft.DataCell(ft.Text(cliente_a, color="white", size=14, weight="bold")), 
+                        ft.DataCell(ft.Text(iva_a, color="white", size=13, weight="bold")),
+                    ]),
+                    ft.DataRow(cells=[
+                        ft.DataCell(ft.Text("NIÑO (BASE)", color="white", size=12, weight="bold")),
+                        ft.DataCell(ft.Text(base_display_n, color="rgba(255,255,255,0.8)", size=12)),
+                        ft.DataCell(ft.Text(cliente_n, color="white", size=14, weight="bold")), 
+                        ft.DataCell(ft.Text(iva_n, color="white", size=13, weight="bold")),
+                    ]),
+                    # 🟢 GRUPO 2: PRECIO CON DR (Sincronizado en Verde Neón)
+                    ft.DataRow(cells=[
+                        ft.DataCell(ft.Text("ADULTO (RESERVA)", color="#00FF66", size=12, weight="bold")),
+                        ft.DataCell(ft.Text(base_display_a, color="rgba(0,255,102,0.8)", size=12)),
+                        ft.DataCell(ft.Text(cliente_a, color="#00FF66", size=14, weight="bold")), 
+                        ft.DataCell(ft.Text(iva_a, color="#00FF66", size=13, weight="bold")),
+                    ]),
+                    ft.DataRow(cells=[
+                        ft.DataCell(ft.Text("NIÑO (RESERVA)", color="#00FF66", size=12, weight="bold")),
+                        ft.DataCell(ft.Text(base_display_n, color="rgba(0,255,102,0.8)", size=12)),
+                        ft.DataCell(ft.Text(cliente_n, color="#00FF66", size=14, weight="bold")), 
+                        ft.DataCell(ft.Text(iva_n, color="#00FF66", size=13, weight="bold")),
+                    ]),
+                    # 🟠 GRUPO 3: DESC. TEMPORADA (Sincronizado en Naranja Rockstar)
+                    ft.DataRow(cells=[
+                        ft.DataCell(ft.Text("ADULTO (TEMPORADA)", color="#FF8C00", size=12, weight="bold")),
+                        ft.DataCell(ft.Text(base_display_a, color="rgba(255,140,0,0.8)", size=12)),
+                        ft.DataCell(ft.Text(cliente_a, color="#FF8C00", size=14, weight="bold")), 
+                        ft.DataCell(ft.Text(iva_a, color="#FF8C00", size=13, weight="bold")),
+                    ]),
+                    ft.DataRow(cells=[
+                        ft.DataCell(ft.Text("NIÑO (TEMPORADA)", color="#FF8C00", size=12, weight="bold")),
+                        ft.DataCell(ft.Text(base_display_n, color="rgba(255,140,0,0.8)", size=12)),
+                        ft.DataCell(ft.Text(cliente_n, color="#FF8C00", size=14, weight="bold")), 
+                        ft.DataCell(ft.Text(iva_n, color="#FF8C00", size=13, weight="bold")),
+                    ]),
+                ]
+            )
+
+            cuadro_tabla_auditoria = ft.Container(
+                bgcolor="#111622", border_radius=15, padding=0, 
+                border=ft.Border(
+                    top=ft.BorderSide(3.0, "#FFFFFF"), bottom=ft.BorderSide(3.0, "#FFFFFF"), 
+                    left=ft.BorderSide(1.0, "rgba(255,255,255,0.15)"), right=ft.BorderSide(1.0, "rgba(255,255,255,0.15)")
+                ),
+                content=tabla_auditoria_real
+            )
+
+            dialogo_auditoria = ft.AlertDialog(
+                bgcolor="#0B0E14",
+                title=ft.Row([
+                    ft.Icon(ft.Icons.MONETIZATION_ON_OUTLINED, color="#00F7FF", size=24),
+                    ft.Text(f"AUDITORÍA DE TARIFAS — {num_cabaña}", style=ft.TextStyle(color="#00F7FF", size=16, weight="bold", letter_spacing=1.0))
+                ], alignment="start"),
+                content=ft.Container(width=750, height=315, content=cuadro_tabla_auditoria),
+                actions=[
+                    ft.TextButton(
+                        "ENTENDIDO", 
+                        on_click=lambda _: [setattr(dialogo_auditoria, "open", False), page.update()], 
+                        style=ft.ButtonStyle(color="#00F7FF", text_style=ft.TextStyle(weight="bold", size=13))
+                    )
+                ],
+                actions_alignment="end"
+            )
+            page.overlay.append(dialogo_auditoria)
+            dialogo_auditoria.open = True
+            page.update()
+
+        # --- RETORNAMOS TU FILA ORIGINAL INTACTA ---
+        return ft.GestureDetector(
+            mouse_cursor=ft.MouseCursor.CLICK,
+            on_tap=abrir_desglose_modal,
+            content=ft.Container(
+                bgcolor="#141923", border_radius=8, 
+                padding=ft.Padding(left=12, top=8, right=12, bottom=8), 
+                border=ft.Border(bottom=ft.BorderSide(0.5, "rgba(255,255,255,0.1)")),
+                content=ft.Row([
+                    ft.Container(expand=3, alignment=ft.Alignment(0, 0), content=ft.Text(num_cabaña, color="white", weight="bold", size=14, text_align=ft.TextAlign.CENTER)),
+                    ft.Container(expand=2, alignment=ft.Alignment(0, 0), content=ft.Text(tipo_unidad, color="rgba(255,255,255,0.8)", size=14, text_align=ft.TextAlign.CENTER)),
+                    ft.Container(expand=2, alignment=ft.Alignment(0, 0), content=ft.Text(capacidad_u, color="rgba(255,255,255,0.8)", size=14, text_align=ft.TextAlign.CENTER)),
+                    ft.Container(expand=2, alignment=ft.Alignment(0, 0), content=ft.Text(estado_u, color="#00FFCC" if estado_u == "DISPONIBLE" else "#FF3366", weight="bold", size=13, text_align=ft.TextAlign.CENTER)),
+                    ft.Container(expand=2, alignment=ft.Alignment(0, 0), content=ft.Text(adulto_raw, color="#FFB300", weight="bold", size=14, text_align=ft.TextAlign.CENTER)),
+                    ft.Container(expand=2, alignment=ft.Alignment(0, 0), content=ft.Text(nino_raw, color="#FFB300", weight="bold", size=14, text_align=ft.TextAlign.CENTER)),
+                    ft.Container(
+                        width=40, alignment=ft.Alignment(0, 0),
+                        content=ft.IconButton(
+                            icon=ft.Icons.SETTINGS, icon_size=18, icon_color="rgba(255,255,255,0.5)",
+
+                            tooltip="Opciones de Habitación", mouse_cursor=ft.MouseCursor.CLICK
+                        )
+                    )
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+            )
+        )
+
+    txt_filtro_buscar = ft.TextField(
+        label="FILTRO PARA BUSCAR",
+        label_style=ft.TextStyle(color="rgba(255,255,255,0.4)", size=12), # <--- CORREGIDO: label_style
+        width=210, height=40, text_size=12, color="white",
+        border_color="rgba(255,255,255,0.2)", border_radius=10, text_align=ft.TextAlign.CENTER,
+        filled=True,
+        fill_color="#0D47A1", 
+    )
+
+    # --- MOTOR DE BÚSQUEDA EN TIEMPO REAL PARA EL INVENTARIO ---
+    def filtrar_inventario_en_caliente(e):
+        texto_busqueda = txt_filtro_buscar.value.upper().strip()
+        
+        conn = sqlite3.connect("starblim.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM habitaciones ORDER BY habitacion ASC")
+        registros = cursor.fetchall()
+        conn.close()
+
+        lista_inventario_filas.controls.clear()
+
+        for reg in registros:
+            hab_num   = reg[0]
+            hab_ubic  = reg[1]
+            hab_tipo  = reg[2]
+            hab_estado = reg[3]
+            hab_cap   = reg[4]
+            hab_adulto = reg[5]
+            hab_nino   = reg[6]
+
+            if (texto_busqueda in hab_num.upper() or 
+                texto_busqueda in hab_ubic.upper() or 
+                texto_busqueda in hab_tipo.upper()):
+                
+                datos_inventario = {
+                    "habitacion": hab_num,
+                    "tipo": hab_tipo,
+                    "capacidad": hab_cap,
+                    "estado": hab_estado,
+                    "adulto": hab_adulto,
+                    "nino": hab_nino
+                }
+                lista_inventario_filas.controls.append(crear_fila_inventario_dinamica(datos_inventario))
+        page.update()
+
+    txt_filtro_buscar.on_change = filtrar_inventario_en_caliente
+
+    # --- BOTÓN DE AUMENTO GENERAL CON DEGRADADO VERDE-ROJO ---
+    btn_aumento_general = ft.Container(
+        content=ft.TextButton(
+            content=ft.Text("APLICAR AUMENTO GENERAL", color="white", size=12, weight="bold"),
+            style=ft.ButtonStyle(
+                bgcolor="transparent",              
+                padding=11,                         
+                alignment=ft.Alignment(0, 0),       
+                overlay_color="rgba(255,255,255,0.15)" 
+            ),
+            on_click=abrir_modal_ajuste_masivo
+        ),
+        border_radius=15,
+        border=borde_premium,
+        gradient=ft.LinearGradient(
+            colors=["#1B8F57", "#8B1A1A"],    
+            begin=ft.Alignment(-1, 0),         
+            end=ft.Alignment(1, 0),           
+        ),
+    )
+
+    # --- SWITCH DE IVA REACTIVO ---
+    switch_activar_iva = ft.Switch(
+        label="Activar IVA",
+        label_text_style=ft.TextStyle(color="rgba(255,255,255,0.8)", size=11, weight="bold"),
+        thumb_color={ft.ControlState.SELECTED: "#2979FF"},
+        track_color={ft.ControlState.SELECTED: "#1A237E"},
+        value=False,
+        on_change=gatillar_alerta_iva_reactiva  
+    )
+
+    fila_herramientas_alta = ft.Row(
+        controls=[
+            ft.Container(content=txt_filtro_buscar, width=210),
+            ft.Container(expand=True), 
+            btn_aumento_general,
+            ft.Container(expand=True), 
+            ft.Container(content=switch_activar_iva, width=210, alignment=ft.Alignment(1, 0)) 
+        ],
+        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER
+    )
+
+    # --- BOTÓN CIRCULAR (+) CON HOVER NATIVO CALIBRADO ---
+    btn_agregar_unidad_tabla = ft.IconButton(
+        icon=ft.Icons.ADD,
+        icon_size=18,
+        mouse_cursor=ft.MouseCursor.CLICK, 
+        style=ft.ButtonStyle(
+            icon_color={
+                ft.ControlState.HOVERED: "#00F7FF",       
+                ft.ControlState.DEFAULT: "#00C3FF",       
+            },
+            overlay_color="transparent",                  
+            padding=0,                                    
+            visual_density=ft.VisualDensity.COMPACT,      
+        ),
+        on_click=abrir_alta_inventario 
+    )
+
+    def texto_titulo_inv(texto, peso):
+        return ft.Container(
+            content=ft.Text(texto, color="white", weight=ft.FontWeight.BOLD, size=14, text_align=ft.TextAlign.CENTER),
+            expand=peso, alignment=ft.Alignment(0, 0)
+        )
+
+    encabezado_tabla_inventario = ft.Container(
+        content=ft.Row([
+            texto_titulo_inv("HABITACIÓN", 3),
+            texto_titulo_inv("TIPO", 2),
+            texto_titulo_inv("CAPACIDAD", 2),
+            texto_titulo_inv("ESTADO", 2),
+            texto_titulo_inv("ADULTO", 2),
+            texto_titulo_inv("NIÑO", 2),
+            ft.Container(width=40, alignment=ft.Alignment(0, 0), content=btn_agregar_unidad_tabla)
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        bgcolor="#030097", border_radius=6, padding=Padding(12, 8, 12, 8)
+    )
+
+    cartel_guia_precios = ft.Container(
+        content=ft.Text(
+            "PARA VER MÁS DETALLES SOBRE LOS PRECIOS DE LAS HABITACIONES, SELECCIONE UNA HABITACIÓN DE LA LISTA",
+            color="white", size=10, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER
+        ),
+        bgcolor="#0D47A1",                 
+        padding=ft.Padding(15, 12, 15, 12), 
+        alignment=ft.Alignment(0, 0),      
+        margin=ft.Padding(left=-15, top=10, right=-15, bottom=-15),
+        border_radius=ft.BorderRadius(
+            top_left=0, top_right=0, bottom_left=12, bottom_right=12
+        )
+    )
+
+    cuadro_inventario_filas = ft.Container(
+        content=ft.Column([
+            encabezado_tabla_inventario,
+            ft.Container(height=4),
+            lista_inventario_filas,        
+            cartel_guia_precios            
+        ], expand=True, spacing=0),
+        bgcolor="#85000000", border=borde_de_las_tablas, border_radius=12, padding=15, expand=True
+    )
+
+    btn_descuento_temporada = ft.TextButton(
+        content=ft.Text("DESCUENTO POR TEMPORADA", color="white", size=12, weight="bold"),
+        style=ft.ButtonStyle(
+            bgcolor="#E65100", 
+            shape=ft.RoundedRectangleBorder(radius=15),
+            side=borde_premium, padding=11
+        ),
+        on_click=abrir_modal_temporada 
+    )
